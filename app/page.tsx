@@ -2,14 +2,14 @@
 
 import { useState, useEffect } from "react";
 import { searchAndSave } from "./actions";
-import { Country, State, City } from "country-state-city";
+import { Country, State, City, ICountry, IState, ICity } from "country-state-city";
 
 export default function Home() {
   const [keyword, setKeyword] = useState("");
 
-  const [countries, setCountries] = useState<any[]>([]);
-  const [states, setStates] = useState<any[]>([]);
-  const [cities, setCities] = useState<any[]>([]);
+  const [countries, setCountries] = useState<ICountry[]>([]);
+  const [states, setStates] = useState<IState[]>([]);
+  const [cities, setCities] = useState<ICity[]>([]);
 
   const [selectedCountry, setSelectedCountry] = useState("");
   const [selectedState, setSelectedState] = useState("");

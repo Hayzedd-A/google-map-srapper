@@ -16,8 +16,11 @@ export async function searchAndSave(keyword: string, country: string, state: str
     console.log("Spreadsheet updated:", stats);
     
     return { success: true, count: results.length, stats };
-  } catch (error: any) {
+  } catch (error) {
     console.error("Search failed:", error);
-    return { success: false, error: error.message };
+    if (error instanceof Error) {
+      return { success: false, error: error.message };
+    }
+    return { success: false, error: "An unexpected error occurred in actions." };
   }
 }
