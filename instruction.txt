@@ -1,0 +1,13 @@
+Create a complete web app that accepts a query and updates a spreadsheet of the result.
+
+The app should have the following features:
+
+1. Accept a search query from the user e.g: "restaurants in New York".
+2. Use the Google serp API to search for the query.
+3. Update a spreadsheet with the results.
+
+The spreadsheet should have the following columns (not all columns are required):
+
+name, address, city, state, country, phone number, website, rating, number of reviews, google place id, latitude, longitude, images, opening hours, price level, 
+
+The api should allow pagination so that it can fetch results in chunks of 100s. avoid duplicate by their place id.

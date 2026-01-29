@@ -1,65 +1,302 @@
-import Image from "next/image";
+"use client";
+
+import { useState, useEffect } from "react";
+import { searchAndSave } from "./actions";
+import { Country, State, City } from "country-state-city";
 
 export default function Home() {
+  const [keyword, setKeyword] = useState("");
+
+  const [countries, setCountries] = useState<any[]>([]);
+  const [states, setStates] = useState<any[]>([]);
+  const [cities, setCities] = useState<any[]>([]);
+
+  const [selectedCountry, setSelectedCountry] = useState("");
+  const [selectedState, setSelectedState] = useState("");
+  const [selectedCity, setSelectedCity] = useState("");
+  const [cityType, setCityType] = useState<"pre-filled" | "manual">(
+    "pre-filled",
+  );
+
+  const [loading, setLoading] = useState(false);
+  const [status, setStatus] = useState("");
+  const [progress, setProgress] = useState("");
+
+  useEffect(() => {
+    setCountries(Country.getAllCountries());
+  }, []);
+
+  const handleCountryChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const countryCode = e.target.value;
+    setSelectedCountry(countryCode);
+    setStates(State.getStatesOfCountry(countryCode));
+    setSelectedState("");
+    setCities([]);
+    setSelectedCity("");
+  };
+
+  const handleStateChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const stateCode = e.target.value;
+    setSelectedState(stateCode);
+    const stateCities = City.getCitiesOfState(selectedCountry, stateCode);
+    setCities(stateCities);
+    setSelectedCity("");
+  };
+
+  const handleCityChange = (city: string) => {
+    if (city === "__manual-input__") setCityType("manual");
+    else if (city === "__pre-filled__") setCityType("pre-filled");
+    else setSelectedCity(city);
+  };
+
+  const handleSearch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!keyword.trim() || !selectedCountry || !selectedState) {
+      setStatus("Error: Keyword, Country, and State are required.");
+      return;
+    }
+
+    setLoading(true);
+    setStatus("Starting...");
+    setProgress("");
+
+    const countryName =
+      Country.getCountryByCode(selectedCountry)?.name || selectedCountry;
+    const stateName =
+      State.getStateByCodeAndCountry(selectedState, selectedCountry)?.name ||
+      selectedState;
+
+    try {
+      if (selectedCity === "ALL") {
+        // Automation Mode: Loop through all cities
+        const citiesToSearch = cities;
+        let totalAdded = 0;
+        let totalFound = 0;
+
+        setStatus(
+          `Starting automation for ${citiesToSearch.length} cities in ${stateName}, ${countryName}...`,
+        );
+
+        for (let i = 0; i < citiesToSearch.length; i++) {
+          const city = citiesToSearch[i];
+          const cityName = city.name;
+
+          setProgress(
+            `Processing city ${i + 1}/${citiesToSearch.length}: ${cityName}`,
+          );
+
+          try {
+            const result = await searchAndSave(
+              keyword,
+              countryName,
+              stateName,
+              cityName,
+            );
+            if (result.success) {
+              totalFound += result?.count || 0;
+              totalAdded += result?.stats?.added || 0;
+            }
+          } catch (err) {
+            console.error(`Failed to search for ${cityName}`, err);
+          }
+
+          // Small delay to be nice to the server/API
+          await new Promise((resolve) => setTimeout(resolve, 500));
+        }
+
+        setStatus(
+          `Automation Complete! Found ${totalFound} results. Added ${totalAdded} new entries to spreadsheet.`,
+        );
+        setProgress("");
+      } else {
+        // Single City Mode
+        const cityName = selectedCity || ""; // If empty, it might just search state/country depending on logic, but let's assume specific city if selected
+
+        // If no city selected but not ALL, maybe warn? Or just search state?
+        // For now, if no city selected, we pass empty string, backend handles it as "Keyword in State, Country"
+
+        setStatus("Searching Google Maps...");
+        const result = await searchAndSave(
+          keyword,
+          countryName,
+          stateName,
+          cityName,
+        );
+
+        if (result.success) {
+          setStatus(
+            `Success! Found ${result.count} results. Added ${result.stats?.added} new entries to spreadsheet.`,
+          );
+        } else {
+          setStatus(`Error: ${result.error}`);
+        }
+      }
+    } catch (err) {
+      setStatus("An unexpected error occurred.");
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
+    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
+      <div className="max-w-md w-full bg-white rounded-xl shadow-lg p-8">
+        <h1 className="text-2xl font-bold text-gray-900 mb-6 text-center">
+          Google Map Scraper
+        </h1>
+
+        <form onSubmit={handleSearch} className="space-y-4">
+          <div>
+            <label
+              htmlFor="keyword"
+              className="block text-sm font-medium text-gray-700 mb-1"
             >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
+              Keyword (e.g. Restaurants)
+            </label>
+            <input
+              type="text"
+              id="keyword"
+              value={keyword}
+              onChange={(e) => setKeyword(e.target.value)}
+              placeholder="e.g. Restaurants"
+              className="w-full text-black px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+              disabled={loading}
+              required
             />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label
+                htmlFor="country"
+                className="block text-sm font-medium text-gray-700 mb-1"
+              >
+                Country
+              </label>
+              <select
+                id="country"
+                value={selectedCountry}
+                onChange={handleCountryChange}
+                className="w-full text-black px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                disabled={loading}
+                required
+              >
+                <option value="">Select Country</option>
+                {countries.map((country) => (
+                  <option key={country.isoCode} value={country.isoCode}>
+                    {country.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label
+                htmlFor="state"
+                className="block text-sm font-medium text-gray-700 mb-1"
+              >
+                State
+              </label>
+              <select
+                id="state"
+                value={selectedState}
+                onChange={handleStateChange}
+                className="w-full text-black px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                disabled={loading || !selectedCountry}
+                required
+              >
+                <option value="">Select State</option>
+                {states.map((state) => (
+                  <option key={state.isoCode} value={state.isoCode}>
+                    {state.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label
+              htmlFor="city"
+              className="block text-sm font-medium text-gray-700 mb-1"
+            >
+              City
+            </label>
+            {cityType === "manual" ? (
+              <div className="flex gap-2">
+              <input
+                id="city"
+                value={selectedCity}
+                onChange={(e) => handleCityChange(e.target.value)}
+                className="w-full text-black px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                disabled={loading || !selectedState}
+                required
+                />
+                <button className="whitespace-nowrap py-3 px-4 rounded-lg text-white font-medium transition-colors bg-blue-600 hover:bg-blue-700 active:bg-blue-800" onClick={() => handleCityChange("__pre-filled__")} >Use prefilled</button>
+                </div>
+            ) : (
+              <select
+                id="city"
+                value={selectedCity}
+                onChange={(e) => handleCityChange(e.target.value)}
+                className="w-full text-black px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                disabled={loading || !selectedState}
+              >
+                <option value="">Select City (Optional)</option>
+                <option value="__manual-input__">Input Manual</option>
+                {cities.length > 0 && (
+                  <option value="ALL" className="font-bold text-blue-600">
+                    -- ALL CITIES (Automation) --
+                  </option>
+                )}
+                {cities.map((city) => (
+                  <option key={city.name} value={city.name}>
+                    {city.name}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading}
+            className={`w-full py-3 px-4 rounded-lg text-white font-medium transition-colors ${
+              loading
+                ? "bg-blue-400 cursor-not-allowed"
+                : "bg-blue-600 hover:bg-blue-700 active:bg-blue-800"
+            }`}
           >
-            Documentation
+            {loading ? "Processing..." : "Start Scraping"}
+          </button>
+        </form>
+
+        {(status || progress) && (
+          <div
+            className={`mt-6 p-4 rounded-lg text-sm ${
+              status.startsWith("Error")
+                ? "bg-red-50 text-red-700"
+                : "bg-green-50 text-green-700"
+            }`}
+          >
+            <div className="font-medium">{status}</div>
+            {progress && (
+              <div className="mt-1 text-xs opacity-80">{progress}</div>
+            )}
+          </div>
+        )}
+
+        <div className="mt-8 pt-6 border-t border-gray-100">
+          <h2 className="text-sm font-semibold text-gray-900 mb-2">Results</h2>
+          <a
+            href="/results.xlsx"
+            download
+            className="flex items-center justify-center w-full py-2 px-4 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors text-sm"
+          >
+            Download Spreadsheet (.xlsx)
           </a>
         </div>
-      </main>
+      </div>
     </div>
   );
 }
