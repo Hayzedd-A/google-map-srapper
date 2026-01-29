@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { searchAndSave } from "./actions";
+import { useState, useEffect, useCallback } from "react";
+import { searchAndSave, searchWithAutomation, checkAutomationStatus } from "./actions";
 import { Country, State, City, ICountry, IState, ICity } from "country-state-city";
 
 export default function Home() {
@@ -21,10 +21,58 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState("");
   const [progress, setProgress] = useState("");
+  const [override, setOverride] = useState(false);
+  const [queryExists, setQueryExists] = useState(false);
+  const [queryStatus, setQueryStatus] = useState<string | undefined>();
+  const [resumedFrom, setResumedFrom] = useState<number | undefined>();
 
   useEffect(() => {
     setCountries(Country.getAllCountries());
   }, []);
+
+  // Check query status when search parameters change
+  const checkQueryStatusFn = useCallback(async () => {
+    if (!keyword.trim() || !selectedCountry || !selectedState) {
+      setQueryExists(false);
+      setQueryStatus(undefined);
+      setResumedFrom(undefined);
+      return;
+    }
+
+    try {
+      const countryName =
+        Country.getCountryByCode(selectedCountry)?.name || selectedCountry;
+      const stateName =
+        State.getStateByCodeAndCountry(selectedState, selectedCountry)?.name ||
+        selectedState;
+
+      const isAutomation = selectedCity === "ALL";
+      const result = await checkAutomationStatus(
+        keyword,
+        countryName,
+        stateName
+      );
+
+      setQueryExists(result.exists);
+      setQueryStatus(result.status);
+      
+      if (result.exists && result.progressIndex && result.progressIndex > 0) {
+        setResumedFrom(result.progressIndex);
+      } else {
+        setResumedFrom(undefined);
+      }
+    } catch (error) {
+      console.error("Failed to check query status:", error);
+    }
+  }, [keyword, selectedCountry, selectedState, selectedCity]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      checkQueryStatusFn();
+    }, 500); // Debounce
+
+    return () => clearTimeout(timer);
+  }, [checkQueryStatusFn]);
 
   const handleCountryChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const countryCode = e.target.value;
@@ -33,6 +81,7 @@ export default function Home() {
     setSelectedState("");
     setCities([]);
     setSelectedCity("");
+    setOverride(false);
   };
 
   const handleStateChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -41,12 +90,14 @@ export default function Home() {
     const stateCities = City.getCitiesOfState(selectedCountry, stateCode);
     setCities(stateCities);
     setSelectedCity("");
+    setOverride(false);
   };
 
   const handleCityChange = (city: string) => {
+    setSelectedCity(city);
+    setOverride(false);
     if (city === "__manual-input__") setCityType("manual");
     else if (city === "__pre-filled__") setCityType("pre-filled");
-    else setSelectedCity(city);
   };
 
   const handleSearch = async (e: React.FormEvent) => {
@@ -59,6 +110,7 @@ export default function Home() {
     setLoading(true);
     setStatus("Starting...");
     setProgress("");
+    setResumedFrom(undefined);
 
     const countryName =
       Country.getCountryByCode(selectedCountry)?.name || selectedCountry;
@@ -73,9 +125,11 @@ export default function Home() {
         let totalAdded = 0;
         let totalFound = 0;
 
-        setStatus(
-          `Starting automation for ${citiesToSearch.length} cities in ${stateName}, ${countryName}...`,
-        );
+        const statusMessage = queryExists 
+          ? `Resuming automation for ${citiesToSearch.length} cities in ${stateName}, ${countryName}...`
+          : `Starting automation for ${citiesToSearch.length} cities in ${stateName}, ${countryName}...`;
+        
+        setStatus(statusMessage);
 
         for (let i = 0; i < citiesToSearch.length; i++) {
           const city = citiesToSearch[i];
@@ -91,6 +145,7 @@ export default function Home() {
               countryName,
               stateName,
               cityName,
+              override,
             );
             if (result.success) {
               totalFound += result?.count || 0;
@@ -121,12 +176,19 @@ export default function Home() {
           countryName,
           stateName,
           cityName,
+          override,
         );
 
         if (result.success) {
-          setStatus(
-            `Success! Found ${result.count} results. Added ${result.stats?.added} new entries to spreadsheet.`,
-          );
+          if (result.skipped) {
+            setStatus(
+              `Query already completed! Found ${result.count} results previously.`,
+            );
+          } else {
+            setStatus(
+              `Success! Found ${result.count} results. Added ${result.stats?.added} new entries to spreadsheet.`,
+            );
+          }
         } else {
           setStatus(`Error: ${result.error}`);
         }
@@ -136,7 +198,27 @@ export default function Home() {
       console.error(err);
     } finally {
       setLoading(false);
+      setOverride(false);
     }
+  };
+
+  // Get status display text
+  const getStatusDisplayText = () => {
+    if (!queryExists) return null;
+    
+    const statusLabels: Record<string, string> = {
+      pending: "⏳ Query pending",
+      in_progress: "🔄 Query in progress",
+      completed: "✅ Query completed",
+      failed: "❌ Query failed",
+    };
+    
+    return (
+      <span className="text-sm text-blue-600">
+        {statusLabels[queryStatus || ""] || `Status: ${queryStatus}`}
+        {resumedFrom && ` (resuming from city ${resumedFrom})`}
+      </span>
+    );
   };
 
   return (
@@ -232,7 +314,13 @@ export default function Home() {
                 disabled={loading || !selectedState}
                 required
                 />
-                <button className="whitespace-nowrap py-3 px-4 rounded-lg text-white font-medium transition-colors bg-blue-600 hover:bg-blue-700 active:bg-blue-800" onClick={() => handleCityChange("__pre-filled__")} >Use prefilled</button>
+                <button 
+                  type="button"
+                  className="whitespace-nowrap py-3 px-4 rounded-lg text-white font-medium transition-colors bg-blue-600 hover:bg-blue-700 active:bg-blue-800" 
+                  onClick={() => handleCityChange("__pre-filled__")}
+                >
+                  Use prefilled
+                </button>
                 </div>
             ) : (
               <select
@@ -256,6 +344,27 @@ export default function Home() {
                 ))}
               </select>
             )}
+          </div>
+
+          {/* Query Status Indicator */}
+          {getStatusDisplayText()}
+
+          {/* Override Checkbox */}
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="override"
+              checked={override}
+              onChange={(e) => setOverride(e.target.checked)}
+              className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+              disabled={loading}
+            />
+            <label
+              htmlFor="override"
+              className="text-sm font-medium text-gray-700 cursor-pointer"
+            >
+              Override previous query (re-run search)
+            </label>
           </div>
 
           <button
@@ -289,8 +398,9 @@ export default function Home() {
         <div className="mt-8 pt-6 border-t border-gray-100">
           <h2 className="text-sm font-semibold text-gray-900 mb-2">Results</h2>
           <a
-            href="/results.xlsx"
-            download
+            href="/api/download"
+            target="_blank"
+            rel="noopener noreferrer"
             className="flex items-center justify-center w-full py-2 px-4 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors text-sm"
           >
             Download Spreadsheet (.xlsx)

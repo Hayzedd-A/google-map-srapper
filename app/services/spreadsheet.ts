@@ -1,72 +1,97 @@
 import * as XLSX from 'xlsx';
-import path from 'path';
-import fs from 'fs';
-import { PlaceResult } from './scraper';
+import connectDB from '@/lib/mongodb';
+import PlaceResult from '@/models/PlaceResult';
+import { PlaceResult as ScrapedPlaceResult } from './scraper';
 
-const FILE_PATH = path.join(process.cwd(), 'public', 'results.xlsx');
+export interface UpdateStats {
+  total: number;
+  added: number;
+}
 
-export async function updateSpreadsheet(newResults: PlaceResult[], country: string, state: string, city: string) {
-  let workbook: XLSX.WorkBook;
-  let existingData: any[] = [];
-
-  if (fs.existsSync(FILE_PATH)) {
-    const fileBuffer = fs.readFileSync(FILE_PATH);
-    workbook = XLSX.read(fileBuffer, { type: 'buffer' });
-    const sheetName = workbook.SheetNames[0];
-    const worksheet = workbook.Sheets[sheetName];
-    existingData = XLSX.utils.sheet_to_json(worksheet);
-  } else {
-    workbook = XLSX.utils.book_new();
-  }
-
-  // Create a Map of existing place_ids to avoid duplicates
-  const existingMap = new Map(existingData.map((item: any) => [item.google_place_id, item]));
+export async function saveToMongoDB(
+  newResults: ScrapedPlaceResult[],
+  country: string,
+  state: string,
+  city: string,
+  searchQueryId: string
+): Promise<UpdateStats> {
+  await connectDB();
 
   let addedCount = 0;
+
   for (const result of newResults) {
-    if (!existingMap.has(result.place_id)) {
-      existingMap.set(result.place_id, {
-        name: result.title,
+    // Check if place already exists
+    const existing = await PlaceResult.findOne({ place_id: result.place_id });
+    
+    if (!existing) {
+      const placeResult = new PlaceResult({
+        place_id: result.place_id,
+        title: result.title,
         address: result.address,
-        city: city || extractCity(result.address), 
-        state: state, 
-        country: country,
-        phone_number: result.phone,
+        phone: result.phone,
         website: result.website,
         rating: result.rating,
-        number_of_reviews: result.reviews,
-        google_place_id: result.place_id,
+        reviews: result.reviews,
         latitude: result.latitude,
         longitude: result.longitude,
-        images: result.thumbnail,
-        opening_hours: result.hours,
+        type: result.type,
+        thumbnail: result.thumbnail,
+        hours: result.hours,
         price_level: result.price_level,
+        country,
+        state,
+        city: city || extractCity(result.address),
+        searchQueryId,
       });
+
+      await placeResult.save();
       addedCount++;
     }
   }
 
-  const allData = Array.from(existingMap.values());
-  const newWorksheet = XLSX.utils.json_to_sheet(allData);
+  const totalCount = await PlaceResult.countDocuments({ searchQueryId });
 
-  // If workbook has no sheets, append one. Else replace the first one.
-  if (workbook.SheetNames.length === 0) {
-    XLSX.utils.book_append_sheet(workbook, newWorksheet, 'Results');
-  } else {
-    workbook.Sheets[workbook.SheetNames[0]] = newWorksheet;
-  }
+  return { total: totalCount, added: addedCount };
+}
 
-  // Ensure directory exists
-  const dir = path.dirname(FILE_PATH);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
+export async function getAllResultsFromMongo(): Promise<any[]> {
+  await connectDB();
 
-  // Write file using fs directly for better control
-  const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
-  fs.writeFileSync(FILE_PATH, buffer);
+  const results = await PlaceResult.find({}).lean();
   
-  return { total: allData.length, added: addedCount };
+  return results.map((item: any) => ({
+    name: item.title,
+    address: item.address,
+    city: item.city,
+    state: item.state,
+    country: item.country,
+    phone_number: item.phone,
+    website: item.website,
+    rating: item.rating,
+    number_of_reviews: item.reviews,
+    google_place_id: item.place_id,
+    latitude: item.latitude,
+    longitude: item.longitude,
+    images: item.thumbnail,
+    opening_hours: item.hours,
+    price_level: item.price_level,
+  }));
+}
+
+export async function generateXlsxFromMongo(): Promise<Buffer> {
+  const data = await getAllResultsFromMongo();
+
+  const worksheet = XLSX.utils.json_to_sheet(data);
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Results');
+
+  const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+  return buffer;
+}
+
+export async function getResultsCount(): Promise<number> {
+  await connectDB();
+  return await PlaceResult.countDocuments({});
 }
 
 function extractCity(address: string): string {
@@ -79,3 +104,4 @@ function extractCity(address: string): string {
   }
   return "";
 }
+

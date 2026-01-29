@@ -18,7 +18,7 @@ export interface PlaceResult {
   price_level?: string;
 }
 
-export async function searchGoogleMaps(query: string, limit: number = 100): Promise<PlaceResult[]> {
+export async function searchGoogleMaps(query: string, limit: number = 100, _queryId?: string): Promise<PlaceResult[]> {
   if (!API_KEY) {
     throw new Error("SERP_API_KEY is not set in environment variables.");
   }
