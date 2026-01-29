@@ -10,6 +10,7 @@ export interface UpdateStats {
 
 export async function saveToMongoDB(
   newResults: ScrapedPlaceResult[],
+  keyword: string,
   country: string,
   state: string,
   city: string,
@@ -38,6 +39,7 @@ export async function saveToMongoDB(
         thumbnail: result.thumbnail,
         hours: result.hours,
         price_level: result.price_level,
+        keyword,
         country,
         state,
         city: city || extractCity(result.address),
@@ -60,6 +62,7 @@ export async function getAllResultsFromMongo(): Promise<any[]> {
   const results = await PlaceResult.find({}).lean();
   
   return results.map((item: any) => ({
+    keyword: item.keyword,
     name: item.title,
     address: item.address,
     city: item.city,

@@ -66,7 +66,7 @@ export async function searchAndSave(
     const results = await searchGoogleMaps(query);
     console.log(`Found ${results.length} results.`);
 
-    const stats = await saveToMongoDB(results, country, state, city, queryId);
+    const stats = await saveToMongoDB(results, keyword, country, state, city, queryId);
     console.log("MongoDB updated:", stats);
 
     // Mark as completed
@@ -154,7 +154,7 @@ export async function searchWithAutomation(
         const cityQuery = `${keyword} in ${cityName}, ${state}, ${country}`;
         const results = await searchGoogleMaps(cityQuery);
         
-        const stats = await saveToMongoDB(results, country, state, cityName, currentQueryId);
+        const stats = await saveToMongoDB(results, keyword, country, state, cityName, currentQueryId);
         
         totalFound += results.length;
         totalAdded += stats.added;

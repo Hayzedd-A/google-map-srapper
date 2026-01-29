@@ -15,6 +15,7 @@ export interface IPlaceResult extends Document {
   thumbnail?: string;
   hours?: string;
   price_level?: string;
+  keyword: string;
   country: string;
   state: string;
   city?: string;
@@ -49,6 +50,10 @@ const PlaceResultSchema = new Schema<IPlaceResult>(
     thumbnail: String,
     hours: String,
     price_level: String,
+    keyword: {
+      type: String,
+      required: true,
+    },
     country: {
       type: String,
       required: true,
