@@ -94,10 +94,13 @@ export default function Home() {
   };
 
   const handleCityChange = (city: string) => {
-    setSelectedCity(city);
     setOverride(false);
-    if (city === "__manual-input__") setCityType("manual");
+    if (city === "__manual-input__") {
+      setCityType("manual");
+      setSelectedCity("")
+    } 
     else if (city === "__pre-filled__") setCityType("pre-filled");
+    else setSelectedCity(city);
   };
 
   const handleSearch = async (e: React.FormEvent) => {
