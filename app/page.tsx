@@ -123,10 +123,8 @@ export default function Home() {
 
     try {
       if (selectedCity === "ALL") {
-        // Automation Mode: Loop through all cities
+        // Automation Mode: Use server-side automation function
         const citiesToSearch = cities;
-        let totalAdded = 0;
-        let totalFound = 0;
 
         const statusMessage = queryExists 
           ? `Resuming automation for ${citiesToSearch.length} cities in ${stateName}, ${countryName}...`
@@ -134,37 +132,33 @@ export default function Home() {
         
         setStatus(statusMessage);
 
-        for (let i = 0; i < citiesToSearch.length; i++) {
-          const city = citiesToSearch[i];
-          const cityName = city.name;
-
-          setProgress(
-            `Processing city ${i + 1}/${citiesToSearch.length}: ${cityName}`,
-          );
-
-          try {
-            const result = await searchAndSave(
-              keyword,
-              countryName,
-              stateName,
-              cityName,
-              override,
-            );
-            if (result.success) {
-              totalFound += result?.count || 0;
-              totalAdded += result?.stats?.added || 0;
-            }
-          } catch (err) {
-            console.error(`Failed to search for ${cityName}`, err);
-          }
-
-          // Small delay to be nice to the server/API
-          await new Promise((resolve) => setTimeout(resolve, 500));
-        }
-
-        setStatus(
-          `Automation Complete! Found ${totalFound} results. Added ${totalAdded} new entries to spreadsheet.`,
+        const result = await searchWithAutomation(
+          keyword,
+          countryName,
+          stateName,
+          "",
+          citiesToSearch,
+          override
         );
+
+        console.log("========== result", result)
+
+        if (result.success) {
+          if (result.skipped) {
+            setStatus(
+              `Automation already completed! Found ${result.count} results previously.`,
+            );
+          } else {
+            const resumedMessage = result.resumedFromIndex 
+              ? ` (resumed from city ${result.resumedFromIndex})` 
+              : "";
+            setStatus(
+              `Automation Complete! Found ${result.count} results. Added ${result.stats?.added || 0} new entries to spreadsheet.${resumedMessage}`,
+            );
+          }
+        } else {
+          setStatus(`Error: ${result.error}`);
+        }
         setProgress("");
       } else {
         // Single City Mode
@@ -212,7 +206,7 @@ export default function Home() {
     const statusLabels: Record<string, string> = {
       pending: "⏳ Query pending",
       in_progress: "🔄 Query in progress",
-      completed: "✅ Query completed",
+      completed: "✅ Query already completed",
       failed: "❌ Query failed",
     };
     
@@ -226,7 +220,7 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
-      <div className="max-w-md w-full bg-white rounded-xl shadow-lg p-8">
+      <div className="max-w-xl w-full bg-white rounded-xl shadow-lg p-8">
         <h1 className="text-2xl font-bold text-gray-900 mb-6 text-center">
           Google Map Scraper
         </h1>

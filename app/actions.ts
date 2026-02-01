@@ -52,14 +52,14 @@ export async function searchAndSave(
       
       if (historyCheck.record?.status === QueryStatus.IN_PROGRESS || 
           historyCheck.record?.status === QueryStatus.FAILED) {
-        // Will be handled by the automation loop
-        console.log("Query in progress or failed, may resume:", query);
+        console.log("Query in progress or failed, continuing:", query);
+        // Record exists, will be updated on completion
       }
     }
 
-    // If override, reset the query record
-    if (override && historyCheck.exists) {
-      console.log("Overriding previous query:", query);
+    // Create or reset the query record before searching
+    if (!historyCheck.exists || override) {
+      console.log(override ? "Overriding previous query:" : "Creating new query record:", query);
       await createQueryRecord(keyword, country, state, city, 0);
     }
 
@@ -147,17 +147,29 @@ export async function searchWithAutomation(
 
       console.log(`Processing city ${i + 1}/${cities.length}: ${cityName}`);
 
-      // Update progress
+      // Update automation progress
       await updateQueryProgress(currentQueryId, i + 1);
 
       try {
-        const cityQuery = `${keyword} in ${cityName}, ${state}, ${country}`;
-        const results = await searchGoogleMaps(cityQuery);
+        // Use searchAndSave to check if individual city was already completed
+        const result = await searchAndSave(
+          keyword,
+          country,
+          state,
+          cityName,
+          override  // Pass override flag to handle city-level skipping
+        );
         
-        const stats = await saveToMongoDB(results, keyword, country, state, cityName, currentQueryId);
-        
-        totalFound += results.length;
-        totalAdded += stats.added;
+        if (result.success) {
+          if (!result.skipped) {
+            totalFound += result?.count || 0;
+            totalAdded += result?.stats?.added || 0;
+          } else {
+            // City was skipped because it was already completed
+            console.log(`City ${cityName} was already completed, skipped.`);
+            totalFound += result?.count || 0; // Still count the existing results
+          }
+        }
       } catch (err) {
         console.error(`Failed to search for ${cityName}`, err);
         // Continue with next city on error

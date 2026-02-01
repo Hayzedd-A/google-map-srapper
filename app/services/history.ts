@@ -1,9 +1,9 @@
 import connectDB from '@/lib/mongodb';
-import QueryHistory, { IQueryHistory, QueryStatus, QueryStatusType } from '@/models/QueryHistory';
+import QueryHistory, { IQueryHistory, QueryStatus } from '@/models/QueryHistory';
+import crypto from 'crypto';
 
 // Re-export QueryStatus for convenience
 export { QueryStatus };
-import crypto from 'crypto';
 
 // Generate a unique query ID based on the search parameters
 export function generateQueryId(keyword: string, country: string, state: string, city: string): string {
@@ -42,7 +42,7 @@ export async function checkQueryHistory(
   return { exists: true, record: record as IQueryHistory, canResume };
 }
 
-// Create a new query record
+// Create a new query record (or replace existing one if override)
 export async function createQueryRecord(
   keyword: string,
   country: string,
@@ -54,18 +54,29 @@ export async function createQueryRecord(
 
   const queryId = generateQueryId(keyword, country, state, city);
 
-  const record = new QueryHistory({
-    queryId,
-    keyword,
-    country,
-    state,
-    city,
-    status: QueryStatus.IN_PROGRESS,
-    progressIndex: 0,
-    totalCities,
-  });
+  // Use findOneAndUpdate with upsert to create or replace the record
+  const record = await QueryHistory.findOneAndUpdate(
+    { queryId },
+    {
+      queryId,
+      keyword,
+      country,
+      state,
+      city,
+      status: QueryStatus.IN_PROGRESS,
+      progressIndex: 0,
+      totalCities,
+      resultCount: 0,
+      errorMessage: undefined,
+    },
+    { 
+      upsert: true, 
+      new: true,
+      setDefaultsOnInsert: true 
+    }
+  );
 
-  return await record.save();
+  return record!;
 }
 
 // Update query progress (for automation mode)
@@ -99,7 +110,8 @@ export async function markQueryCompleted(
       status: QueryStatus.COMPLETED,
       progressIndex: 0, // Reset progress as it's complete
       resultCount: totalResults,
-    }
+    },
+    { upsert: true } // Create the record if it doesn't exist (safety fallback)
   );
 }
 

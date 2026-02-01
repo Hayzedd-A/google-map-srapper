@@ -4,7 +4,7 @@ import mongoose, { Schema, Document, Model } from 'mongoose';
 export interface IPlaceResult extends Document {
   place_id: string;
   title: string;
-  address: string;
+  address?: string;
   phone?: string;
   website?: string;
   rating?: number;
@@ -14,6 +14,11 @@ export interface IPlaceResult extends Document {
   type?: string;
   thumbnail?: string;
   hours?: string;
+  extensions?: string;
+  types?: string;
+  service_options?: string;
+  reviews_link?: string;
+  photos_link?: string;
   price_level?: string;
   keyword: string;
   country: string;
@@ -38,7 +43,7 @@ const PlaceResultSchema = new Schema<IPlaceResult>(
     },
     address: {
       type: String,
-      required: true,
+      required: false,
     },
     phone: String,
     website: String,
@@ -50,6 +55,11 @@ const PlaceResultSchema = new Schema<IPlaceResult>(
     thumbnail: String,
     hours: String,
     price_level: String,
+    extensions: String,
+    types: String,
+    service_options: String,
+    reviews_link: String,
+    photos_link: String,
     keyword: {
       type: String,
       required: true,

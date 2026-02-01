@@ -37,6 +37,11 @@ export async function saveToMongoDB(
         longitude: result.longitude,
         type: result.type,
         thumbnail: result.thumbnail,
+        extensions: result.extensions,
+        types: result.types,
+        service_options: result.service_options,
+        reviews_link: result.reviews_link,
+        photos_link: result.photos_link,
         hours: result.hours,
         price_level: result.price_level,
         keyword,
@@ -78,6 +83,11 @@ export async function getAllResultsFromMongo(): Promise<any[]> {
     images: item.thumbnail,
     opening_hours: item.hours,
     price_level: item.price_level,
+    extensions: item.extensions,
+    types: item.types,
+    service_options: item.service_options,
+    reviews_link: item.reviews_link,
+    photos_link: item.photos_link,
   }));
 }
 
