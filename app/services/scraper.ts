@@ -58,12 +58,6 @@ export async function searchGoogleMaps(query: string, limit: number = 100, _quer
         break;
       }
 
-      console.log("local_results", response.local_results.map(e => ({
-        place_id: e.place_id,
-        extensions: JSON.stringify(e.extensions),
-        service_options: e.service_options,
-        types: e.types,
-        })));
 
       const mappedResults = response.local_results.map((item: any) => ({
         place_id: item.place_id,
